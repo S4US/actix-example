@@ -1,25 +1,62 @@
-# Use the pre-built binary from Jenkins
-FROM debian:bookworm-slim
+pipeline {
+    agent any
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    environment {
+        IMAGE_NAME = "actix-example"
+        PATH = "$HOME/.cargo/bin:$PATH"
+    }
 
-# Create a non-root user
-RUN useradd -r -s /bin/false appuser
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
 
-# Copy the pre-built binary from Jenkins workspace
-COPY target/release/actix-example /usr/local/bin/app
+        stage('Install Rust') {
+            steps {
+                sh '''
+                    if ! command -v rustc &> /dev/null; then
+                        echo "Installing Rust..."
+                        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+                    fi
+                    export PATH="$HOME/.cargo/bin:$PATH"
+                    source $HOME/.cargo/env || true
 
-# Change ownership
-RUN chown appuser:appuser /usr/local/bin/app
+                    rustc --version
+                    cargo --version
+                '''
+            }
+        }
 
-# Switch to non-root user
-USER appuser
+        stage('Build Rust Project') {
+            steps {
+                sh '''
+                    export PATH="$HOME/.cargo/bin:$PATH"
+                    source $HOME/.cargo/env || true
 
-# Expose port (adjust if your app uses different port)
-EXPOSE 8080
+                    cargo build --release
+                '''
+            }
+        }
 
-# Run the binary
-CMD ["app"]
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${IMAGE_NAME}:latest ."
+                echo "✅ Built Docker image: ${IMAGE_NAME}:latest"
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo "✅ Pipeline completed successfully!"
+        }
+        failure {
+            echo "❌ Pipeline failed!"
+        }
+    }
+}
