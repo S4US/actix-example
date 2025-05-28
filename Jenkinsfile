@@ -1,11 +1,5 @@
 pipeline {
-    // Use a Docker agent with Rust and build dependencies
-    agent {
-        docker {
-            image 'rust:latest'
-            args '-u root' // Run as root to avoid permission issues
-        }
-    }
+    agent any
 
     stages {
         stage('Checkout') {
@@ -14,43 +8,17 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Build in Docker') {
             steps {
                 script {
+                    def appName = 'actix-example'
+                    def buildNumber = env.BUILD_NUMBER
+
                     sh '''
-                        # Install build dependencies (gcc, make, curl) if not already present
-                        apt-get update
-                        apt-get install -y gcc make curl
+                        docker run --rm -v $PWD:/usr/src/app -w /usr/src/app rust:latest \
+                        bash -c "cargo build --release && cargo test"
                     '''
                 }
-            }
-        }
-
-        stage('Install Rust') {
-            steps {
-                script {
-                    sh '''
-                        # Rust is already installed in rust:latest, but verify
-                        rustc --version
-                        cargo --version
-                    '''
-                }
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh '''
-                    cargo build --release
-                '''
-            }
-        }
-
-        stage('Test') {
-            steps {
-                sh '''
-                    cargo test
-                '''
             }
         }
 
@@ -58,12 +26,11 @@ pipeline {
             steps {
                 script {
                     def appName = 'actix-example'
+                    def buildNumber = env.BUILD_NUMBER
+
                     def dockerImage = docker.build("${appName}:latest")
-
-                    // Tag with build number as well
-                    sh "docker tag ${appName}:latest ${appName}:${BUILD_NUMBER}"
-
-                    echo "Built Docker image: ${appName}:latest and ${appName}:${BUILD_NUMBER}"
+                    sh "docker tag ${appName}:latest ${appName}:${buildNumber}"
+                    echo "Built Docker image: ${appName}:latest and ${appName}:${buildNumber}"
                 }
             }
         }
