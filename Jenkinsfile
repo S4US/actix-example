@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        PATH = "$HOME/.cargo/bin:$PATH"
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -8,30 +12,15 @@ pipeline {
             }
         }
 
-        stage('Build in Docker') {
+        stage('Build') {
             steps {
-                script {
-                    def appName = 'actix-example'
-                    def buildNumber = env.BUILD_NUMBER
-
-                    sh '''
-                        docker run --rm -v $PWD:/usr/src/app -w /usr/src/app rust:latest \
-                        bash -c "cargo build --release && cargo test"
-                    '''
-                }
+                sh 'cargo build --release'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Test') {
             steps {
-                script {
-                    def appName = 'actix-example'
-                    def buildNumber = env.BUILD_NUMBER
-
-                    def dockerImage = docker.build("${appName}:latest")
-                    sh "docker tag ${appName}:latest ${appName}:${buildNumber}"
-                    echo "Built Docker image: ${appName}:latest and ${appName}:${buildNumber}"
-                }
+                sh 'cargo test'
             }
         }
     }
