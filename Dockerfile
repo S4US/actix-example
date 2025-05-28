@@ -1,62 +1,25 @@
-pipeline {
-    agent any
+# Use the pre-built binary from Jenkins
+FROM debian:bookworm-slim
 
-    environment {
-        IMAGE_NAME = "actix-example"
-        PATH = "$HOME/.cargo/bin:$PATH"
-    }
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
+# Create a non-root user
+RUN useradd -r -s /bin/false appuser
 
-        stage('Install Rust') {
-            steps {
-                sh '''
-                    if ! command -v rustc &> /dev/null; then
-                        echo "Installing Rust..."
-                        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-                    fi
-                    export PATH="$HOME/.cargo/bin:$PATH"
-                    source $HOME/.cargo/env || true
+# Copy the pre-built binary from Jenkins workspace
+COPY target/release/actix-example /usr/local/bin/app
 
-                    rustc --version
-                    cargo --version
-                '''
-            }
-        }
+# Change ownership
+RUN chown appuser:appuser /usr/local/bin/app
 
-        stage('Build Rust Project') {
-            steps {
-                sh '''
-                    export PATH="$HOME/.cargo/bin:$PATH"
-                    source $HOME/.cargo/env || true
+# Switch to non-root user
+USER appuser
 
-                    cargo build --release
-                '''
-            }
-        }
+# Expose port (adjust if your app uses different port)
+EXPOSE 8080
 
-        stage('Build Docker Image') {
-            steps {
-                sh "docker build -t ${IMAGE_NAME}:latest ."
-                echo "✅ Built Docker image: ${IMAGE_NAME}:latest"
-            }
-        }
-    }
-
-    post {
-        always {
-            cleanWs()
-        }
-        success {
-            echo "✅ Pipeline completed successfully!"
-        }
-        failure {
-            echo "❌ Pipeline failed!"
-        }
-    }
-}
+# Run the binary
+CMD ["app"]
